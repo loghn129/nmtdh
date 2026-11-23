@@ -1,0 +1,175 @@
+<?xml version="1.0"?>
+<!--
+  EEZYbotARM MK2 - mô hình cho RViz (mét, radian).
+
+  Tay thật có cơ cấu hình bình hành (vòng kín), URDF không mô tả được. Ở đây dùng chuỗi nối tiếp
+  tương đương (bảng 9.2 trong BAN_GIAO_ROS2.md):
+      joint_base     = rad(q1)          q1  = góc đế THẬT
+      joint_shoulder = rad(th2)         th2 = góc tay trên so với phương ngang
+      joint_elbow    = rad(phi - th2)   phi = góc cẳng tay so với phương ngang
+      joint_wrist    = rad(-phi)        -> cụm kẹp luôn nằm ngang
+  Ba khớp tay quay quanh trục "0 -1 0" để góc dương là nâng lên. Mỗi khâu dài dọc trục +X của nó.
+  Node Python tính 4 góc này từ góc servo (eezybot_bringup/joint_math.py).
+
+  Hằng số hình học PHẢI giống newcode/robot_model.py (test/test_urdf_fk.py kiểm tra điều này).
+  Hình khối (hộp, trụ) và độ mở má kẹp chỉ là ƯỚC LƯỢNG ĐỂ VẼ, lấy theo web/static/app.js.
+-->
+<robot name="eezybot_mk2" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ===== Hằng số hình học (mm -> m), giống robot_model.py ===== -->
+  <xacro:property name="L1" value="0.142"/>
+  <xacro:property name="L2" value="0.160"/>
+  <xacro:property name="Z_BASE" value="0.090"/>
+  <xacro:property name="R_OFF" value="0.006"/>
+  <xacro:property name="TOOL_R" value="0.084775"/>
+  <xacro:property name="TOOL_Z" value="-0.004640"/>
+
+  <!-- Quy đổi góc servo -> góc khâu (độ), chỉ dùng để tính giới hạn khớp -->
+  <xacro:property name="SH_GAIN" value="-0.850"/>
+  <xacro:property name="SH_OFF" value="157.671"/>
+  <xacro:property name="EL_CPL" value="0.024"/>
+  <xacro:property name="EL_GAIN" value="0.901"/>
+  <xacro:property name="EL_OFF" value="-53.721"/>
+
+  <!-- Giới hạn (độ): đế theo góc thật, vai / khuỷu theo góc servo -->
+  <xacro:property name="Q1_MIN" value="55.1"/>
+  <xacro:property name="Q1_MAX" value="126.7"/>
+  <xacro:property name="TH2_MIN" value="${SH_GAIN * 160.0 + SH_OFF}"/>   <!-- servo vai 160 -->
+  <xacro:property name="TH2_MAX" value="${SH_GAIN * 20.0 + SH_OFF}"/>    <!-- servo vai 20 -->
+  <!-- phi nhỏ nhất / lớn nhất trên cả vùng (th2, q3) -->
+  <xacro:property name="PHI_MIN" value="${EL_CPL * TH2_MIN + EL_OFF}"/>
+  <xacro:property name="PHI_MAX" value="${EL_CPL * TH2_MAX + EL_GAIN * 75.0 + EL_OFF}"/>
+  <!-- phi - th2: nhỏ nhất khi (th2 lớn, q3 = 0), lớn nhất khi (th2 nhỏ, q3 = 75) -->
+  <xacro:property name="ELB_MIN" value="${(EL_CPL - 1.0) * TH2_MAX + EL_OFF}"/>
+  <xacro:property name="ELB_MAX" value="${(EL_CPL - 1.0) * TH2_MIN + EL_GAIN * 75.0 + EL_OFF}"/>
+  <xacro:property name="FINGER_MAX" value="0.045"/>  <!-- ước lượng -->
+
+  <!-- ===== Màu ===== -->
+  <material name="orange"><color rgba="0.976 0.451 0.086 1"/></material>
+  <material name="orange_light"><color rgba="0.984 0.573 0.235 1"/></material>
+  <material name="dark"><color rgba="0.169 0.204 0.259 1"/></material>
+  <material name="base_grey"><color rgba="0.227 0.271 0.337 1"/></material>
+  <material name="pin"><color rgba="0.796 0.835 0.882 1"/></material>
+  <material name="servo"><color rgba="0.122 0.161 0.216 1"/></material>
+  <material name="tcp_blue"><color rgba="0.145 0.388 0.922 1"/></material>
+
+  <xacro:macro name="box_v" params="size xyz rpy:='0 0 0' material">
+    <visual>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><box size="${size}"/></geometry>
+      <material name="${material}"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- Chốt xoay: trụ nằm ngang dọc trục Y của khâu -->
+  <xacro:macro name="pin_v" params="radius length xyz">
+    <visual>
+      <origin xyz="${xyz}" rpy="${pi / 2} 0 0"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+      <material name="pin"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- ===== Đế cố định: gốc = tâm trục xoay đế trên mặt bàn ===== -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.009"/>
+      <geometry><cylinder radius="0.088" length="0.018"/></geometry>
+      <material name="base_grey"/>
+    </visual>
+  </link>
+
+  <!-- ===== Mâm xoay ===== -->
+  <joint name="joint_base" type="revolute">
+    <parent link="base_link"/>
+    <child link="turntable"/>
+    <origin xyz="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="${radians(Q1_MIN)}" upper="${radians(Q1_MAX)}" effort="1.0" velocity="3.0"/>
+  </joint>
+  <link name="turntable">
+    <visual>
+      <origin xyz="0 0 0.029"/>
+      <geometry><cylinder radius="0.070" length="0.022"/></geometry>
+      <material name="orange_light"/>
+    </visual>
+    <xacro:box_v size="0.070 0.008 0.060" xyz="${R_OFF - 0.005} 0.030 0.068" material="orange"/>
+    <xacro:box_v size="0.070 0.008 0.060" xyz="${R_OFF - 0.005} -0.030 0.068" material="orange"/>
+    <xacro:box_v size="0.042 0.040 0.022" xyz="${R_OFF - 0.010} 0.058 0.080" material="servo"/>
+    <xacro:box_v size="0.042 0.040 0.022" xyz="${R_OFF - 0.010} -0.058 0.080" material="servo"/>
+    <xacro:pin_v radius="0.007" length="0.080" xyz="${R_OFF} 0 ${Z_BASE}"/>
+  </link>
+
+  <!-- ===== Tay trên (L1) ===== -->
+  <joint name="joint_shoulder" type="revolute">
+    <parent link="turntable"/>
+    <child link="upper_arm"/>
+    <origin xyz="${R_OFF} 0 ${Z_BASE}"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="${radians(TH2_MIN)}" upper="${radians(TH2_MAX)}" effort="1.0" velocity="3.0"/>
+  </joint>
+  <link name="upper_arm">
+    <xacro:box_v size="${L1 + 0.024} 0.030 0.022" xyz="${L1 / 2} 0 0" material="orange"/>
+    <xacro:pin_v radius="0.006" length="0.046" xyz="${L1} 0 0"/>
+  </link>
+
+  <!-- ===== Cẳng tay (L2) ===== -->
+  <joint name="joint_elbow" type="revolute">
+    <parent link="upper_arm"/>
+    <child link="forearm"/>
+    <origin xyz="${L1} 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="${radians(ELB_MIN)}" upper="${radians(ELB_MAX)}" effort="1.0" velocity="3.0"/>
+  </joint>
+  <link name="forearm">
+    <xacro:box_v size="${L2 + 0.024} 0.022 0.016" xyz="${L2 / 2} 0 0" material="orange_light"/>
+    <xacro:pin_v radius="0.005" length="0.036" xyz="${L2} 0 0"/>
+  </link>
+
+  <!-- ===== Cụm kẹp: luôn nằm ngang (joint_wrist = -phi) ===== -->
+  <joint name="joint_wrist" type="revolute">
+    <parent link="forearm"/>
+    <child link="gripper_base"/>
+    <origin xyz="${L2} 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="${radians(-PHI_MAX)}" upper="${radians(-PHI_MIN)}" effort="1.0" velocity="3.0"/>
+  </joint>
+  <link name="gripper_base">
+    <xacro:box_v size="${TOOL_R - 0.018} 0.044 0.020" xyz="${(TOOL_R - 0.018) / 2} 0 ${TOOL_Z / 2}" material="orange"/>
+    <xacro:box_v size="0.030 0.022 0.018" xyz="0.030 0 0.020" material="servo"/>
+  </link>
+
+  <!-- Tâm kẹp: cách cổ tay một đoạn CỐ ĐỊNH (TOOL_R, TOOL_Z) -->
+  <joint name="tool_center" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="tcp"/>
+    <origin xyz="${TOOL_R} 0 ${TOOL_Z}"/>
+  </joint>
+  <link name="tcp">
+    <visual>
+      <geometry><sphere radius="0.004"/></geometry>
+      <material name="tcp_blue"/>
+    </visual>
+  </link>
+
+  <!-- ===== Hai má kẹp: giá trị khớp = khoảng cách từ tâm kẹp tới má (ước lượng) ===== -->
+  <xacro:macro name="finger" params="side sign">
+    <joint name="joint_finger_${side}" type="prismatic">
+      <parent link="gripper_base"/>
+      <child link="finger_${side}"/>
+      <origin xyz="${TOOL_R} 0 ${TOOL_Z}"/>
+      <axis xyz="0 ${sign} 0"/>
+      <limit lower="0.0" upper="${FINGER_MAX}" effort="1.0" velocity="0.2"/>
+    </joint>
+    <link name="finger_${side}">
+      <xacro:box_v size="0.034 0.006 0.014" xyz="0 0 0" material="dark"/>
+    </link>
+  </xacro:macro>
+  <xacro:finger side="left" sign="1"/>
+  <xacro:finger side="right" sign="-1"/>
+
+  <!-- ===== Cảnh vật cố định: mặt bàn, máng nghiêng, 3 khay ===== -->
+  <!-- Đường dẫn tương đối (cùng thư mục) -> chạy xacro được cả khi chưa build workspace -->
+  <xacro:include filename="scene.xacro"/>
+
+</robot>

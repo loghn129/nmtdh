@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<!--
+  Cảnh vật cố định quanh robot: mặt bàn, máng nghiêng, 3 khay.
+  MỌI KÍCH THƯỚC Ở ĐÂY LÀ ƯỚC LƯỢNG ĐỂ VẼ (theo web/static/app.js), CHƯA ĐO THẬT.
+  Riêng vị trí điểm gắp và 3 khay (bán kính 300 mm, các góc) là số của robot_model.py.
+
+  Ba khung dùng lại trong node mô phỏng (eezybot_bringup/scene_markers.py) để đặt khối sản phẩm:
+    - chute : gốc = hình chiếu điểm gắp lên mặt bàn, +X chạy ngược dốc máng (ra xa điểm gắp), Z lên
+    - bin1, bin2, bin3 : gốc = tâm khay trên mặt bàn, +X hướng ra xa đế
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:property name="R_PATH" value="0.300"/>
+  <xacro:property name="DEG_PICK" value="55.1"/>
+  <xacro:property name="DEG_BIN1" value="126.7"/>                                   <!-- servo đế 180 -->
+  <xacro:property name="DEG_BIN2" value="${90.0 + (126.7 - 90.0) * 60.0 / 90.0}"/>  <!-- servo đế 150 -->
+  <xacro:property name="DEG_BIN3" value="${90.0 + (126.7 - 90.0) * 30.0 / 90.0}"/>  <!-- servo đế 120 -->
+
+  <!-- Máng (mm -> m). CH_TOP = Z_PICK - nửa cạnh khối = 120 - 25 -->
+  <xacro:property name="CH_TOP" value="0.095"/>
+  <xacro:property name="SLOPE" value="${radians(22.0)}"/>
+  <xacro:property name="S_END" value="-0.055"/>
+  <xacro:property name="S_FLAT" value="0.045"/>
+  <xacro:property name="S_START" value="0.380"/>
+  <xacro:property name="CH_W" value="0.070"/>
+  <xacro:property name="FLAT_LEN" value="${S_FLAT - S_END}"/>
+  <xacro:property name="FLAT_MID" value="${(S_FLAT + S_END) / 2}"/>
+  <xacro:property name="RAMP_LEN" value="${(S_START - S_FLAT) / cos(SLOPE)}"/>
+  <xacro:property name="RAMP_MID" value="${(S_FLAT + S_START) / 2}"/>
+  <xacro:property name="RAMP_TOP" value="${CH_TOP + (S_START - S_FLAT) * tan(SLOPE)}"/>
+  <xacro:property name="RAMP_MID_Z" value="${(CH_TOP + RAMP_TOP) / 2}"/>
+
+  <!-- Khay -->
+  <xacro:property name="BIN_R" value="0.120"/>   <!-- dài theo bán kính -->
+  <xacro:property name="BIN_T" value="0.058"/>   <!-- rộng theo tiếp tuyến -->
+  <xacro:property name="BIN_H" value="0.095"/>
+
+  <material name="table"><color rgba="0.82 0.84 0.87 1"/></material>
+  <material name="chute"><color rgba="0.875 0.898 0.933 1"/></material>
+  <material name="rail"><color rgba="0.796 0.835 0.882 1"/></material>
+  <material name="frame"><color rgba="0.580 0.639 0.722 1"/></material>
+
+  <xacro:macro name="scene_box" params="size xyz rpy:='0 0 0' material">
+    <visual>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><box size="${size}"/></geometry>
+      <material name="${material}"/>
+    </visual>
+  </xacro:macro>
+
+  <!-- ===== Mặt bàn: mặt trên ở z = 0 (bấm "Publish Point" lên đây để thêm vật cản) ===== -->
+  <link name="table">
+    <xacro:scene_box size="1.10 0.80 0.010" xyz="0.10 0.15 -0.005" material="table"/>
+  </link>
+  <joint name="table_fixed" type="fixed">
+    <parent link="base_link"/>
+    <child link="table"/>
+  </joint>
+
+  <!-- ===== Máng nghiêng: sản phẩm trượt theo tiếp tuyến cung R_PATH, dừng ở chặn cuối = điểm gắp ===== -->
+  <joint name="chute_fixed" type="fixed">
+    <parent link="base_link"/>
+    <child link="chute"/>
+    <origin xyz="${R_PATH * cos(radians(DEG_PICK))} ${R_PATH * sin(radians(DEG_PICK))} 0"
+            rpy="0 0 ${radians(DEG_PICK - 90.0)}"/>
+  </joint>
+  <link name="chute">
+    <!-- Đoạn phẳng + đoạn dốc 22 độ -->
+    <xacro:scene_box size="${FLAT_LEN} ${CH_W + 0.012} 0.006" xyz="${FLAT_MID} 0 ${CH_TOP - 0.003}" material="chute"/>
+    <xacro:scene_box size="${RAMP_LEN} ${CH_W + 0.012} 0.006" xyz="${RAMP_MID} 0 ${RAMP_MID_Z - 0.003}"
+                     rpy="0 ${-SLOPE} 0" material="chute"/>
+    <!-- Thành hai bên -->
+    <xacro:scene_box size="${FLAT_LEN} 0.004 0.030" xyz="${FLAT_MID} ${CH_W / 2 + 0.002} ${CH_TOP + 0.012}" material="rail"/>
+    <xacro:scene_box size="${FLAT_LEN} 0.004 0.030" xyz="${FLAT_MID} ${-CH_W / 2 - 0.002} ${CH_TOP + 0.012}" material="rail"/>
+    <xacro:scene_box size="${RAMP_LEN} 0.004 0.030" xyz="${RAMP_MID} ${CH_W / 2 + 0.002} ${RAMP_MID_Z + 0.012}"
+                     rpy="0 ${-SLOPE} 0" material="rail"/>
+    <xacro:scene_box size="${RAMP_LEN} 0.004 0.030" xyz="${RAMP_MID} ${-CH_W / 2 - 0.002} ${RAMP_MID_Z + 0.012}"
+                     rpy="0 ${-SLOPE} 0" material="rail"/>
+    <!-- Chặn cuối máng -->
+    <xacro:scene_box size="0.008 ${CH_W + 0.012} 0.050" xyz="-0.048 0 ${CH_TOP + 0.025}" material="frame"/>
+    <!-- 4 chân -->
+    <xacro:property name="LEG1_H" value="${CH_TOP - 0.006}"/>
+    <xacro:property name="LEG2_H" value="${CH_TOP + (S_START - 0.020 - S_FLAT) * tan(SLOPE) - 0.006}"/>
+    <xacro:scene_box size="0.010 0.010 ${LEG1_H}" xyz="${S_END + 0.012} ${CH_W / 2 - 0.002} ${LEG1_H / 2}" material="frame"/>
+    <xacro:scene_box size="0.010 0.010 ${LEG1_H}" xyz="${S_END + 0.012} ${-CH_W / 2 + 0.002} ${LEG1_H / 2}" material="frame"/>
+    <xacro:scene_box size="0.010 0.010 ${LEG2_H}" xyz="${S_START - 0.020} ${CH_W / 2 - 0.002} ${LEG2_H / 2}" material="frame"/>
+    <xacro:scene_box size="0.010 0.010 ${LEG2_H}" xyz="${S_START - 0.020} ${-CH_W / 2 + 0.002} ${LEG2_H / 2}" material="frame"/>
+  </link>
+
+  <!-- ===== 3 khay trên cung R_PATH ===== -->
+  <xacro:macro name="bin" params="id deg rgb">
+    <material name="bin${id}_floor"><color rgba="${rgb} 1"/></material>
+    <material name="bin${id}_wall"><color rgba="${rgb} 0.45"/></material>
+    <joint name="bin${id}_fixed" type="fixed">
+      <parent link="base_link"/>
+      <child link="bin${id}"/>
+      <origin xyz="${R_PATH * cos(radians(deg))} ${R_PATH * sin(radians(deg))} 0" rpy="0 0 ${radians(deg)}"/>
+    </joint>
+    <link name="bin${id}">
+      <xacro:scene_box size="${BIN_R} ${BIN_T} 0.004" xyz="0 0 0.002" material="bin${id}_floor"/>
+      <xacro:scene_box size="0.003 ${BIN_T} ${BIN_H}" xyz="${BIN_R / 2} 0 ${BIN_H / 2}" material="bin${id}_wall"/>
+      <xacro:scene_box size="0.003 ${BIN_T} ${BIN_H}" xyz="${-BIN_R / 2} 0 ${BIN_H / 2}" material="bin${id}_wall"/>
+      <xacro:scene_box size="${BIN_R} 0.003 ${BIN_H}" xyz="0 ${BIN_T / 2} ${BIN_H / 2}" material="bin${id}_wall"/>
+      <xacro:scene_box size="${BIN_R} 0.003 ${BIN_H}" xyz="0 ${-BIN_T / 2} ${BIN_H / 2}" material="bin${id}_wall"/>
+    </link>
+  </xacro:macro>
+  <xacro:bin id="1" deg="${DEG_BIN1}" rgb="0.898 0.282 0.302"/>   <!-- đỏ -->
+  <xacro:bin id="2" deg="${DEG_BIN2}" rgb="0.961 0.647 0.141"/>   <!-- vàng -->
+  <xacro:bin id="3" deg="${DEG_BIN3}" rgb="0.275 0.655 0.345"/>   <!-- xanh -->
+
+</robot>

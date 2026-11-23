@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!--
+  KHÔNG PHẢI ROBOT THẬT. File này chỉ để joint_state_publisher_gui vẽ 4 thanh trượt theo GÓC SERVO.
+
+  Dùng khớp "prismatic" để giá trị được hiểu là số thường: thanh trượt hiện đúng số ĐỘ của firmware
+  (ví dụ q2_vai = 60.000) thay vì radian. Giới hạn = giới hạn trong newcode/robot_model.py:
+      q1_de    : góc đế THẬT   55.1 .. 126.7
+      q2_vai   : servo vai     20 .. 160
+      q3_khuyu : servo khuỷu    0 .. 75
+      kep      : servo tay kẹp 35 .. 140   (40 = mở, 140 = kẹp chặt)
+  Giá trị ban đầu (HOME = 90, 60, 40, kẹp mở 40) đặt trong launch/sliders.launch.py (tham số "zeros").
+  eezybot_bringup/slider_node.py đổi 4 số này sang khớp của URDF thật.
+-->
+<robot name="servo_sliders">
+  <link name="s0"/>
+  <link name="s1"/>
+  <link name="s2"/>
+  <link name="s3"/>
+  <link name="s4"/>
+
+  <joint name="q1_de" type="prismatic">
+    <parent link="s0"/>
+    <child link="s1"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="55.1" upper="126.7" effort="1" velocity="1"/>
+  </joint>
+  <joint name="q2_vai" type="prismatic">
+    <parent link="s1"/>
+    <child link="s2"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="20.0" upper="160.0" effort="1" velocity="1"/>
+  </joint>
+  <joint name="q3_khuyu" type="prismatic">
+    <parent link="s2"/>
+    <child link="s3"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0.0" upper="75.0" effort="1" velocity="1"/>
+  </joint>
+  <joint name="kep" type="prismatic">
+    <parent link="s3"/>
+    <child link="s4"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="35.0" upper="140.0" effort="1" velocity="1"/>
+  </joint>
+</robot>
